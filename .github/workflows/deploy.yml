@@ -73,10 +73,5 @@ jobs:
           --max-instances=10 \
           --concurrency=80 \
           --timeout=300 \
-          --set-env-vars="ENVIRONMENT=production"
-
-    - name: Get service URL
-      run: |
-        SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region=${{ env.REGION }} --format='value(status.url)')
-        echo "Service deployed at: $SERVICE_URL"
-        echo "service-url=$SERVICE_URL" >> $GITHUB_OUTPUT
+          --set-env-vars="ENVIRONMENT=production" \
+          --service-account=pricecomparing@${{ env.PROJECT_ID }}.iam.gserviceaccount.com

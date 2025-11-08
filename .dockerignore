@@ -1,0 +1,32 @@
+# Environnements virtuels Python
+cp_env/
+venv/
+env/
+.env
+
+# Cache Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Fichiers de développement
+.git/
+.gitignore
+README.md
+.pytest_cache/
+
+# Fichiers de configuration locale
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Fichiers temporaires
+.tmp/
+temp/
+
+# Documentation
+docs/

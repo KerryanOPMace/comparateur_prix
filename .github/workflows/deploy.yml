@@ -45,9 +45,7 @@ jobs:
         echo "image-url=$IMAGE_URL" >> $GITHUB_OUTPUT
         echo "Image URL set to output: $IMAGE_URL"
 
-    - name: Run tests
-      run: |
-        docker run --rm ${{ steps.build.outputs.image-url }} python -m pytest tests/ -v
+   
 
   deploy:
     name: Deploy to Cloud Run

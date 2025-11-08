@@ -2,25 +2,25 @@ from playwright.sync_api import sync_playwright
 from urllib.parse import quote_plus
 import time
 from regex.utils import fuzzy_score
+import json
 
+URL="https://www.carrefour.fr/s?q="
 
-def get_price(store: str, item: dict):
-    if store.lower() != "carrefour":
-        raise NotImplementedError("Seul Carrefour est supporté actuellement.")
-
+def get_price_carrefour(city: str, item: dict):
+    
     query = f"{item.get('name', '')} {item.get('brand', '')} {item.get('quantity', '')}".strip()
-    url = f"https://www.carrefour.fr/s?q={quote_plus(query)}"
-    print(f"🔎 Recherche : {url}")
+    url = f"{URL}{quote_plus(query)}"
+    print(f"Recherche Carrefour : {url}")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=['--incognito'])
         context = browser.new_context(user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/120.0 Safari/537.36"
         ))
         page = context.new_page()
-        page.goto(url, wait_until="networkidle", timeout=45000)
+        page.goto(url, wait_until="networkidle", timeout=10000)
 
         # Gérer la popup cookies
         try:
@@ -34,9 +34,9 @@ def get_price(store: str, item: dict):
 
         # Attendre les articles
         try:
-            page.wait_for_selector("article.product-list-card-plp-grid-new", timeout=1000)
+            page.wait_for_selector("article.product-list-card-plp-grid-new", timeout=5000)
         except:
-            print("⚠️ Aucun produit trouvé pour", query)
+            print("Aucun produit trouvé pour", query)
             return "", "", False
 
         articles = page.query_selector_all("article.product-list-card-plp-grid-new")
@@ -64,7 +64,6 @@ def get_price(store: str, item: dict):
                 continue
 
         browser.close()
-        print(results)
 
         if not results:
             return "", "", False
@@ -73,11 +72,11 @@ def get_price(store: str, item: dict):
         bests_sorted_by_price = sorted(bests[:3], key=lambda x: x["price"])
         highest_price = bests_sorted_by_price[0]["price"]
         lowest_price = bests_sorted_by_price[-1]["price"]
-        print("💰 Prix le plus bas :", lowest_price, "€", "pour article", bests_sorted_by_price[-1]["name"])
-        print("💰 Prix le plus élevé :", highest_price, "€", "pour article", bests_sorted_by_price[0]["name"])
         return highest_price, lowest_price, True
 
 
-item = {"name": "Spaghetti", "brand": "Barilla", "quantity": "500g"}
-best = get_price("carrefour", item)
-print(best)
+# Test de la fonction
+if __name__ == "__main__":
+    item = {"name": "Prince", "brand": "LU", "quantity": ""}
+    best = get_price_carrefour("Le port-marly", item)
+    print(best)

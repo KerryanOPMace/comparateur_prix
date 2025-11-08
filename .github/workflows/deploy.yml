@@ -9,6 +9,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   GAR_LOCATION: europe-west9 
+  REPOSITORY: pricecomparing
   SERVICE: pricecomparing
   REGION: europe-west9 
 
@@ -37,7 +38,7 @@ jobs:
     - name: Build Docker image
       id: build
       run: |
-        IMAGE_URL="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/comparateur_prix/${{ env.SERVICE }}:${{ github.sha }}"
+        IMAGE_URL="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:${{ github.sha }}"
         docker build -t $IMAGE_URL .
         docker push $IMAGE_URL
         echo "image-url=$IMAGE_URL" >> $GITHUB_OUTPUT

@@ -2,3 +2,5 @@ cp_env
 __pycache__/
 *.py[cod]
 *$py.class
+gcloud.gz
+google-cloud-sdk/

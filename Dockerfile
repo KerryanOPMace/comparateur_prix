@@ -22,8 +22,8 @@ RUN playwright install --with-deps chromium
 # Copier le code de l'application
 COPY . .
 
-# Exposer le port 8000
-EXPOSE 8000
+# Exposer le port 8080
+EXPOSE 8080
 
 # Définir la commande par défaut
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]

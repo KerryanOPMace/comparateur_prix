@@ -14,7 +14,7 @@ def get_price_u(city: str, item: dict):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
-            headless=False,
+            headless=True,
             args=['--incognito']
         )
         context = browser.new_context(user_agent=(

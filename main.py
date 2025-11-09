@@ -3,10 +3,13 @@ from typing import List, Dict, Optional
 import asyncio
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
 from stores.u import get_price_u
 from stores.carrefour import get_price_carrefour
 from stores.aldi import get_price_aldi
 from stores.monoprix import get_price_monoprix
+
+from geolocation.find_supermarches import find_supermarkets
 
 app = FastAPI(
     title="Comparateur de Prix API",
@@ -37,6 +40,15 @@ class ListPriceEstimationRequest(BaseModel):
     store: str
     city: Optional[str] = "Le port-marly"
 
+class ClosestStoreRequest(BaseModel):
+    adress:str
+    max_distance_km: Optional[float] = 5.0
+
+class ColestStoreGroceries(BaseModel):
+    adress: str
+    max_distance_km: Optional[float] = 5.0
+    items: List[Item]
+
 
 def search_single_item(store: str, city: str, item: Dict) -> Dict:
     """Recherche le prix d'un seul article dans un magasin donné"""
@@ -61,6 +73,8 @@ def search_single_item(store: str, city: str, item: Dict) -> Dict:
         return {"item": item, "store": store, "success": False, "error": str(e)}
 
 
+### ENDPOINTS DE L'API ###
+
 @app.get("/")
 async def root():
     """Endpoint racine avec informations sur l'API"""
@@ -74,6 +88,8 @@ async def root():
         "workers_configuration": WORKERS
     }
 
+
+### RECUPERER LE PRIX D'UN SEUL ARTICLE ###
 
 @app.post("/price_estimation")
 async def price_estimation(request: PriceEstimationRequest):
@@ -119,6 +135,8 @@ async def price_estimation(request: PriceEstimationRequest):
         raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 
+### RECUPERER LE PRIX D'UNE LISTE D'ARTICLES ###
+
 @app.post("/list_price_estimation")
 async def list_price_estimation(request: ListPriceEstimationRequest):
     """
@@ -161,9 +179,9 @@ async def list_price_estimation(request: ListPriceEstimationRequest):
         
         return {
             "total_items": len(results),
-            "successful_searches": len([r for r in results if r["success"]]),
-            "failed_searches": len([r for r in results if not r["success"]]),
-            "max_workers_used": max_workers,
+            "rate_success": (len([r for r in results if r["success"]]) / len(results)) * 100,
+            "min_price": sum(r["lowest_price"] for r in results if r["success"]),
+            "max_price": sum(r["highest_price"] for r in results if r["success"]),
             "results": results
         }
         
@@ -200,6 +218,95 @@ def process_items_list(articles: List[Dict], store: str, city: str = "Le port-ma
                 results.append({"item": item, "store": store, "success": False, "error": str(exc)})
     
     return results
+
+
+
+### RECUPERER TOUS LES SUPERMARCHES PROCHES ###
+
+@app.post("/closest_stores")
+async def closest_stores(request: ClosestStoreRequest):
+    """
+    Endpoint pour obtenir les supermarchés proches d'une adresse donnée
+    
+    Args:
+        request: Contient l'adresse et la distance maximale en km
+    
+    Returns:
+        Liste des supermarchés proches
+    """
+    try:
+        stores = find_supermarkets(request.adress, request.max_distance_km)
+        stores = stores.to_dict(orient="records")
+        return {
+            "address": request.adress,
+            "max_distance_km": request.max_distance_km,
+            "found_stores": len(stores),
+            "stores": stores
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
+
+
+### ENDPOINT QUI PREND UNE LISTE, UNE ADRESSE, UN RAYON EN KM ET RETOURNE CHAQUE SUPERMARCHÉ PROCHE AVEC LE HIGHEST PRICE, LOWEST PRICE ET SUCCESS RATE
+@app.post("/closest_store_groceries")
+async def closest_store_groceries(request: ColestStoreGroceries):
+    """
+    Endpoint pour obtenir les supermarchés proches d'une adresse donnée avec les prix des articles
+    
+    Args:
+        request: Contient l'adresse, la distance maximale en km et la liste d'articles
+    
+    Returns:
+        Liste des supermarchés proches avec les prix des articles
+    """
+    try:
+        stores = find_supermarkets(request.adress, request.max_distance_km)
+        stores = stores.to_dict(orient="records")
+        
+        results = []
+        
+        for store in stores:
+            store_name = store.get("name", "").lower()
+            
+            # Chercher si l'un des mots du nom du magasin correspond à une clé dans WORKERS
+            matched_store = None
+            for word in store_name.split():
+                if word in WORKERS:
+                    matched_store = word
+                    break
+            
+            if matched_store:
+                max_workers = WORKERS[matched_store]
+                items_dict = [
+                    {
+                        "name": item.name,
+                        "brand": item.brand or "",
+                        "quantity": item.quantity or ""
+                    }
+                    for item in request.items
+                ]
+                
+                store_results = process_items_list(items_dict, matched_store, store.get("address", ""), max_workers)
+                
+                successful = sum(1 for r in store_results if r.get("success", False))
+                total = len(store_results)
+                results.append({
+                    "store": store,
+                    "success_rate": (successful / total) * 100 if total > 0 else 0,
+                    "min_price": sum(r["lowest_price"] for r in store_results if r["success"]),
+                    "max_price": sum(r["highest_price"] for r in store_results if r["success"]),
+                    
+                })
+        
+        return {
+            "address": request.adress,
+            "max_distance_km": request.max_distance_km,
+            "stores_with_prices": results
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 
 if __name__ == "__main__":

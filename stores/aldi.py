@@ -19,7 +19,7 @@ def get_price_aldi(city: str, item: dict):
             "Chrome/120.0 Safari/537.36"
         ))
         page = context.new_page()
-        page.goto(url, wait_until="networkidle", timeout=10000)
+        page.goto(url, wait_until="networkidle", timeout=15000)
 
         # Gérer la popup cookies
         try:
@@ -33,7 +33,7 @@ def get_price_aldi(city: str, item: dict):
 
         # Attendre les articles
         try:
-            page.wait_for_selector("div.product-tile", timeout=50000)
+            page.wait_for_selector("div.product-tile", timeout=20000)
         except:
             print("Aucun produit trouvé pour", query)
             return "", "", False
@@ -79,8 +79,8 @@ def get_price_aldi(city: str, item: dict):
 
         bests = sorted(results[:5], key=lambda x: x["score"], reverse=True)
         bests_sorted_by_price = sorted(bests[:3], key=lambda x: x["price"])
-        highest_price = bests_sorted_by_price[0]["price"]
-        lowest_price = bests_sorted_by_price[-1]["price"]
+        highest_price = bests_sorted_by_price[-1]["price"]
+        lowest_price = bests_sorted_by_price[0]["price"]
         
         return highest_price, lowest_price, True
 

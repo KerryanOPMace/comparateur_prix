@@ -4,7 +4,8 @@ Script de test pour l'API FastAPI du comparateur de prix
 import requests
 import json
 
-BASE_URL = "http://localhost:8000"
+#BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
+BASE_URL = "http://localhost:8080"
 
 def test_root():
     """Test de l'endpoint racine"""
@@ -47,6 +48,11 @@ def test_multiple_items():
                 "name": "pain",
                 "brand": "",
                 "quantity": "400g"
+            },
+            {
+                "name": "miel pops",
+                "brand": "",
+                "quantity": "500g"
             }
         ],
         "store": "carrefour",
@@ -61,6 +67,52 @@ def test_multiple_items():
     print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
     print()
 
+
+
+def test_closest_stores():
+    """Test de l'endpoint /closest_stores"""
+    data = {
+        "adress": "Marly le roi",
+        "max_distance_km": 2.0
+    }
+    
+    print("=== Test /closest_stores ===")
+    print(f"Données envoyées: {json.dumps(data, indent=2, ensure_ascii=False)}")
+    
+    response = requests.post(f"{BASE_URL}/closest_stores", json=data)
+    
+    print(f"Status: {response.status_code}")
+    print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
+    print()
+
+def test_closest_store_groceries():
+    """Test de l'endpoint /closest_store_groceries"""
+    data = {
+        "adress": "Marly le Roi",
+        "max_distance_km": 2.0,
+        "items": [
+            {
+                "name": "lait",
+                "brand": "lactel",
+                "quantity": "1L"
+            },
+            {
+                "name": "pain",
+                "brand": "",
+                "quantity": "400g"
+            }
+        ]
+    }
+    
+    print("=== Test /closest_store_groceries ===")
+    print(f"Données envoyées: {json.dumps(data, indent=2, ensure_ascii=False)}")
+    
+    response = requests.post(f"{BASE_URL}/closest_store_groceries", json=data)
+    
+    print(f"Status: {response.status_code}")
+    print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
+    print()
+
 if __name__ == "__main__":
     print("Démarrage des tests de l'API...")
     print("Assurez-vous que l'API est lancée avec: python main.py")
@@ -68,8 +120,10 @@ if __name__ == "__main__":
     
     try:
         test_root()
-        test_single_item()
-        test_multiple_items()
+        #test_single_item()
+        #test_multiple_items()
+        test_closest_stores()
+        test_closest_store_groceries()
     except requests.exceptions.ConnectionError:
         print("Erreur: Impossible de se connecter à l'API. Assurez-vous qu'elle est lancée.")
     except Exception as e:

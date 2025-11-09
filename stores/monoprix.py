@@ -78,8 +78,8 @@ def get_price_monoprix(city: str, item: dict):
 
         bests = sorted(results[:5], key=lambda x: x["score"], reverse=True)
         bests_sorted_by_price = sorted(bests[:3], key=lambda x: x["price"])
-        highest_price = bests_sorted_by_price[0]["price"]
-        lowest_price = bests_sorted_by_price[-1]["price"]
+        highest_price = bests_sorted_by_price[-1]["price"]
+        lowest_price = bests_sorted_by_price[0]["price"]
         return highest_price, lowest_price, True
 
 

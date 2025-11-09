@@ -25,10 +25,45 @@ def find_supermarkets(address, radius_km=5):
     );
     out body;
     """
-
-    # 3. Envoyer la requête
-    response = requests.get(overpass_url, params={'data': query})
-    data = response.json()
+    
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(overpass_url, params={'data': query}, timeout=30)
+            
+            if response.status_code == 200:
+                if not response.text.strip():
+                    raise ValueError("Réponse vide de l'API Overpass")
+                data = response.json()
+                break
+                
+            elif response.status_code == 504:  
+                if attempt < max_retries - 1:
+                    continue
+                else:
+                    raise ValueError(f"API Overpass indisponible après {max_retries} tentatives (504)")
+            
+            else:
+                raise ValueError(f"Erreur API Overpass: status {response.status_code}")
+                
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                continue
+            else:
+                raise ValueError(f"Timeout après {max_retries} tentatives")
+                
+        except requests.exceptions.JSONDecodeError as e:
+            if attempt < max_retries - 1:
+                continue
+            else:
+                raise ValueError(f"Réponse invalide après {max_retries} tentatives")
+                
+        except Exception as e:
+            if attempt < max_retries - 1:
+                continue
+            else:
+                raise
 
     # 4. Extraire les résultats
     supermarkets = []
@@ -56,6 +91,6 @@ def find_supermarkets(address, radius_km=5):
 
 # --- Exemple d'utilisation ---
 if __name__ == "__main__":
-    adresse = "4 mail de l'Europe, La Celle-saint-Cloud"
-    resultats = find_supermarkets(adresse, radius_km=1)
+    adresse = "Marly le roi"
+    resultats = find_supermarkets(adresse, radius_km=2)
     print(resultats)

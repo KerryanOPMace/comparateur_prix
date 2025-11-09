@@ -38,7 +38,7 @@ jobs:
     - name: Build Docker image
       id: build
       run: |
-        IMAGE_URL="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE }}:${{ github.sha }}"
+        IMAGE_URL="${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/comparateur_prix:latest"
         echo "Building image: $IMAGE_URL"
         docker build -t $IMAGE_URL .
         docker push $IMAGE_URL
@@ -62,9 +62,10 @@ jobs:
 
     - name: Debug - Check image URL
       run: |
-        echo "Image URL from build job: '${{ needs.build-and-push.outputs.image-url }}'"
-        echo "Length: ${#'${{ needs.build-and-push.outputs.image-url }}'}"
-        if [ -z "${{ needs.build-and-push.outputs.image-url }}" ]; then
+        IMAGE_URL="${{ needs.build-and-push.outputs.image-url }}"
+        echo "Image URL from build job: '$IMAGE_URL'"
+        echo "Length: ${#IMAGE_URL}"
+        if [ -z "$IMAGE_URL" ]; then
           echo "ERROR: Image URL is empty!"
           exit 1
         fi

@@ -65,25 +65,4 @@ jobs:
           --timeout=300 \
           --set-env-vars="ENVIRONMENT=production"
 
-  cleanup:
-    name: Clean up old images
-    needs: deploy
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - name: Google Auth
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-    - name: Clean up
-      run: |
-        gcloud artifacts docker images list \
-          ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/comparateur_prix \
-          --format="value(IMAGE)" > all_images.txt
-        while IFS= read -r image; do
-          if [[ "$image" != *":latest" ]]; then
-            gcloud artifacts docker images delete "$image" --quiet
-          fi
-        done < all_images.txt
+  

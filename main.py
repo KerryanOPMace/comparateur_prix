@@ -54,7 +54,8 @@ def search_single_item(store: str, city: str, item: Dict) -> Dict:
     """Recherche le prix d'un seul article dans un magasin donné"""
     try:
         if store.lower() == "u":
-            highest_price, lowest_price, success = get_price_u(city, item)
+            #highest_price, lowest_price, success = get_price_u(city, item)
+            highest_price, lowest_price, success = 0, 0, False
         elif store.lower() == "carrefour":
             highest_price, lowest_price, success = get_price_carrefour(city, item)
         elif store.lower() == "aldi":

@@ -20,7 +20,7 @@ def get_price_carrefour(city: str, item: dict):
             "Chrome/120.0 Safari/537.36"
         ))
         page = context.new_page()
-        page.goto(url, wait_until="networkidle", timeout=15000)
+        page.goto(url, wait_until="networkidle", timeout=20000)
 
         # Gérer la popup cookies
         try:

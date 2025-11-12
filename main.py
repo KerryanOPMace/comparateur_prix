@@ -61,11 +61,13 @@ class ListPriceEstimationRequest(BaseModel):
     city: Optional[str] = "Le port-marly"
 
 class ClosestStoreRequest(BaseModel):
-    adress:str
+    latitude: float
+    longitude: float
     max_distance_km: Optional[float] = 5.0
 
 class ClosestStoreGroceries(BaseModel):
-    adress: str
+    latitude: float
+    longitude: float
     max_distance_km: Optional[float] = 5.0
     items: List[Item]
 
@@ -273,16 +275,17 @@ async def closest_stores(request: ClosestStoreRequest):
     try:
         # Essayer d'abord Google Maps, fallback sur Overpass si erreur
         try:
-            stores = find_supermarkets_gcp(request.adress, request.max_distance_km)
+            stores = find_supermarkets_gcp(request.latitude, request.longitude, request.max_distance_km)
             api_used = "Google Maps"
         except Exception as gcp_error:
             print(f"Google Maps API indisponible: {gcp_error}")
-            stores = find_supermarkets(request.adress, request.max_distance_km)
+            stores = find_supermarkets(request.latitude, request.longitude, request.max_distance_km)
             api_used = "Overpass"
             
         stores = stores.to_dict(orient="records")
         return {
-            "address": request.adress,
+            "latitude": request.latitude,
+            "longitude": request.longitude,
             "max_distance_km": request.max_distance_km,
             "found_stores": len(stores),
             "api_used": api_used,
@@ -353,11 +356,11 @@ async def closest_store_groceries(request: ClosestStoreGroceries):
     try:
         # Essayer d'abord Google Maps, fallback sur Overpass si erreur
         try:
-            stores = find_supermarkets_gcp(request.adress, request.max_distance_km)
+            stores = find_supermarkets_gcp(request.latitude, request.longitude, request.max_distance_km)
             api_used = "Google Maps"
         except Exception as gcp_error:
             print(f"Google Maps API indisponible: {gcp_error}")
-            stores = find_supermarkets(request.adress, request.max_distance_km)
+            stores = find_supermarkets(request.latitude, request.longitude, request.max_distance_km)
             api_used = "Overpass"
         
             
@@ -385,7 +388,8 @@ async def closest_store_groceries(request: ClosestStoreGroceries):
         results = await asyncio.gather(*tasks)
         
         return {
-            "address": request.adress,
+            "latitude": request.latitude,
+            "longitude": request.longitude,
             "max_distance_km": request.max_distance_km,
             "stores_processed": len(results),
             "api_used": api_used,

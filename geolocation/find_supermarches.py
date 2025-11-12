@@ -6,10 +6,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def find_supermarkets_gcp(address, radius_km=5):
+def find_supermarkets_gcp(latitude, longitude, radius_km=5):
     """
-    Trouve les supermarchés autour d'une adresse donnée en utilisant Google Places API.
+    Trouve les supermarchés autour de coordonnées données en utilisant Google Places API.
     Beaucoup plus rapide et fiable qu'Overpass.
+    
+    Args:
+        latitude: Latitude du point de recherche
+        longitude: Longitude du point de recherche
+        radius_km: Rayon de recherche en kilomètres
     
     Nécessite une clé API Google Maps avec Places API activée.
     Définir la variable d'environnement GOOGLE_MAPS_API_KEY.
@@ -19,29 +24,13 @@ def find_supermarkets_gcp(address, radius_km=5):
     if not api_key:
         raise ValueError("GOOGLE_MAPS_API_KEY non définie. Obtenez une clé sur https://console.cloud.google.com/")
     
-    # 1. Géocoder l'adresse avec Google Geocoding API
-    geocoding_url = "https://maps.googleapis.com/maps/api/geocode/json"
-    geocoding_params = {
-        'address': address,
-        'key': api_key,
-        'language': 'fr'
-    }
+    # Validation des coordonnées
+    if not (-90 <= latitude <= 90):
+        raise ValueError(f"Latitude invalide: {latitude}. Doit être entre -90 et 90.")
+    if not (-180 <= longitude <= 180):
+        raise ValueError(f"Longitude invalide: {longitude}. Doit être entre -180 et 180.")
     
-    try:
-        geocoding_response = requests.get(geocoding_url, params=geocoding_params, timeout=10)
-        geocoding_response.raise_for_status()
-        geocoding_data = geocoding_response.json()
-        
-        if geocoding_data['status'] != 'OK' or not geocoding_data['results']:
-            raise ValueError(f"Adresse introuvable : {address}")
-            
-        location = geocoding_data['results'][0]['geometry']['location']
-        lat, lon = location['lat'], location['lng']
-        
-    except Exception as e:
-        raise ValueError(f"Erreur géocodage : {str(e)}")
-    
-    # 2. Rechercher les supermarchés avec Places API Nearby Search
+    # Rechercher les supermarchés avec Places API Nearby Search
     places_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     radius_m = radius_km * 1000
     
@@ -52,7 +41,7 @@ def find_supermarkets_gcp(address, radius_km=5):
     
     for place_type in place_types:
         places_params = {
-            'location': f"{lat},{lon}",
+            'location': f"{latitude},{longitude}",
             'radius': radius_m,
             'type': place_type,
             'key': api_key,
@@ -63,7 +52,7 @@ def find_supermarkets_gcp(address, radius_km=5):
             places_response = requests.get(places_url, params=places_params, timeout=10)
             places_response.raise_for_status()
             places_data = places_response.json()
-            print(places_data)
+            
             if places_data['status'] not in ['OK', 'ZERO_RESULTS']:
                 continue
                 
@@ -113,7 +102,7 @@ def find_supermarkets_gcp(address, radius_km=5):
         except Exception as e:
             continue  # Continuer avec le type suivant si erreur
     
-    # 3. Supprimer les doublons basés sur le nom et la position
+    # Supprimer les doublons basés sur le nom et la position
     df = pd.DataFrame(supermarkets)
     if not df.empty:
         df = df.drop_duplicates(subset=['name', 'latitude', 'longitude'])
@@ -122,26 +111,29 @@ def find_supermarkets_gcp(address, radius_km=5):
     return df
 
 
-def find_supermarkets(address, radius_km=5):
+def find_supermarkets(latitude, longitude, radius_km=5):
     """
-    Trouve les supermarchés et drives autour d'une adresse donnée.
+    Trouve les supermarchés et drives autour de coordonnées données avec Overpass.
+    
+    Args:
+        latitude: Latitude du point de recherche
+        longitude: Longitude du point de recherche
+        radius_km: Rayon de recherche en kilomètres
     """
-    # 1. Géocoder l’adresse
-    geolocator = Nominatim(user_agent="drive_finder")
-    location = geolocator.geocode(address)
-    if not location:
-        raise ValueError(f"Adresse introuvable : {address}")
-
-    lat, lon = location.latitude, location.longitude
+    # 1. Validation des coordonnées
+    if not (-90 <= latitude <= 90):
+        raise ValueError(f"Latitude invalide: {latitude}. Doit être entre -90 et 90.")
+    if not (-180 <= longitude <= 180):
+        raise ValueError(f"Longitude invalide: {longitude}. Doit être entre -180 et 180.")
 
     # 2. Construire la requête Overpass (OpenStreetMap)
     overpass_url = "https://overpass-api.de/api/interpreter"
     query = f"""
     [out:json][timeout:25];
     (
-      node["shop"="supermarket"](around:{radius_km * 1000},{lat},{lon});
-      node["shop"="convenience"](around:{radius_km * 1000},{lat},{lon});
-      node["drive_through"="yes"](around:{radius_km * 1000},{lat},{lon});
+      node["shop"="supermarket"](around:{radius_km * 1000},{latitude},{longitude});
+      node["shop"="convenience"](around:{radius_km * 1000},{latitude},{longitude});
+      node["drive_through"="yes"](around:{radius_km * 1000},{latitude},{longitude});
     );
     out body;
     """
@@ -211,11 +203,12 @@ def find_supermarkets(address, radius_km=5):
 
 # --- Exemple d'utilisation ---
 if __name__ == "__main__":
-    adresse = "Marly le roi"
+    # Coordonnées de Marly le Roi
+    lat, lon = 48.8671, 2.0935
     
     print("=== Test avec Google Maps API ===")
     try:
-        resultats_gcp = find_supermarkets_gcp(adresse, radius_km=2)
+        resultats_gcp = find_supermarkets_gcp(lat, lon, radius_km=2)
         print("Résultats Google Maps :")
         print(resultats_gcp)
         print(f"Trouvé {len(resultats_gcp)} magasins")
@@ -224,7 +217,7 @@ if __name__ == "__main__":
     
     print("\n=== Test avec Overpass API ===")
     try:
-        resultats_overpass = find_supermarkets(adresse, radius_km=2)
+        resultats_overpass = find_supermarkets(lat, lon, radius_km=2)
         print("Résultats Overpass :")
         print(resultats_overpass)
         print(f"Trouvé {len(resultats_overpass)} magasins")

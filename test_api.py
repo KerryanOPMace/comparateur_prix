@@ -4,8 +4,8 @@ Script de test pour l'API FastAPI du comparateur de prix
 import requests
 import json
 
-BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
-#BASE_URL = "http://localhost:8080"
+#BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
+BASE_URL = "http://localhost:8080"
 
 def test_root():
     """Test de l'endpoint racine"""
@@ -72,7 +72,8 @@ def test_multiple_items():
 def test_closest_stores():
     """Test de l'endpoint /closest_stores"""
     data = {
-        "adress": "Marly le roi",
+        "latitude": 48.8671,
+        "longitude": 2.0935,
         "max_distance_km": 2.0
     }
     
@@ -90,8 +91,9 @@ import time
 def test_closest_store_groceries():
     """Test de l'endpoint /closest_store_groceries"""
     data = {
-        "adress": "Marly le Roi",
-        "max_distance_km": 1.0,
+        "latitude": 48.8671,
+        "longitude": 2.0935,
+        "max_distance_km": 1.5,
         "items": [
             {
                 "name": "lait",

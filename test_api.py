@@ -4,8 +4,8 @@ Script de test pour l'API FastAPI du comparateur de prix
 import requests
 import json
 
-#BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
-BASE_URL = "http://localhost:8080"
+BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
+#BASE_URL = "http://localhost:8080"
 
 def test_root():
     """Test de l'endpoint racine"""
@@ -91,21 +91,10 @@ import time
 def test_closest_store_groceries():
     """Test de l'endpoint /closest_store_groceries"""
     data = {
-        "latitude": 48.8671,
-        "longitude": 2.0935,
-        "max_distance_km": 1.5,
-        "items": [
-            {
-                "name": "lait",
-                "brand": "lactel",
-                "quantity": "1L"
-            },
-            {
-                "name": "pain",
-                "brand": "",
-                "quantity": "400g"
-            }
-        ]
+        "latitude": 48.8484788,
+        "longitude": 2.1333557,
+        "max_distance_km": 3,
+        "items": [{"brand": "", "category": "legumes", "id": "existing-1762857584658-3", "name": "Courgettes", "quantity": ""},{"brand": "", "category": "boissons_soft", "id": "1762857789247vmndssaqj6n", "name": "Coca cola", "quantity": "1L"}]
     }
     
     print("=== Test /closest_store_groceries ===")

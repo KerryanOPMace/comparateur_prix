@@ -1,15 +1,35 @@
 import concurrent.futures
 from typing import List, Dict, Optional
 import asyncio
+import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+# Charger les variables d'environnement depuis .env si le fichier existe (développement local)
+def load_env_file():
+    """Charge le fichier .env en développement local"""
+    try:
+        with open('.env', 'r') as f:
+            for line in f:
+                if '=' in line and not line.startswith('#'):
+                    key, value = line.strip().split('=', 1)
+                    if key not in os.environ:  # Ne pas écraser les variables système
+                        os.environ[key] = value
+        print("Variables d'environnement chargées depuis .env (développement)")
+    except FileNotFoundError:
+        print("Aucun fichier .env trouvé (probablement en production)")
+    except Exception as e:
+        print(f"Erreur lors du chargement de .env: {e}")
+
+# Charger la configuration
+load_env_file()
 
 from stores.u import get_price_u
 from stores.carrefour import get_price_carrefour
 from stores.aldi import get_price_aldi
 from stores.monoprix import get_price_monoprix
 
-from geolocation.find_supermarches import find_supermarkets
+from geolocation.find_supermarches import find_supermarkets, find_supermarkets_gcp
 
 app = FastAPI(
     title="Comparateur de Prix API",
@@ -19,10 +39,10 @@ app = FastAPI(
 
 
 WORKERS = {
-    "u": 2,
-    "carrefour": 4,
-    "aldi": 8,
-    "monoprix": 8
+    "u": 3,
+    "carrefour": 6,
+    "aldi": 10,
+    "monoprix": 10
 }
 
 class Item(BaseModel):
@@ -44,7 +64,7 @@ class ClosestStoreRequest(BaseModel):
     adress:str
     max_distance_km: Optional[float] = 5.0
 
-class ColestStoreGroceries(BaseModel):
+class ClosestStoreGroceries(BaseModel):
     adress: str
     max_distance_km: Optional[float] = 5.0
     items: List[Item]
@@ -75,6 +95,21 @@ def search_single_item(store: str, city: str, item: Dict) -> Dict:
 
 
 ### ENDPOINTS DE L'API ###
+
+@app.get("/health")
+async def health():
+    """Endpoint de santé avec diagnostic des configurations"""
+    google_api_configured = bool(os.getenv('GOOGLE_MAPS_API_KEY'))
+    environment = os.getenv('ENVIRONMENT', 'development')
+    
+    return {
+        "status": "healthy",
+        "environment": environment,
+        "google_maps_api_configured": google_api_configured,
+        "supported_stores": list(WORKERS.keys()),
+        "workers_configuration": WORKERS
+    }
+
 
 @app.get("/")
 async def root():
@@ -236,12 +271,21 @@ async def closest_stores(request: ClosestStoreRequest):
         Liste des supermarchés proches
     """
     try:
-        stores = find_supermarkets(request.adress, request.max_distance_km)
+        # Essayer d'abord Google Maps, fallback sur Overpass si erreur
+        try:
+            stores = find_supermarkets_gcp(request.adress, request.max_distance_km)
+            api_used = "Google Maps"
+        except Exception as gcp_error:
+            print(f"Google Maps API indisponible: {gcp_error}")
+            stores = find_supermarkets(request.adress, request.max_distance_km)
+            api_used = "Overpass"
+            
         stores = stores.to_dict(orient="records")
         return {
             "address": request.adress,
             "max_distance_km": request.max_distance_km,
             "found_stores": len(stores),
+            "api_used": api_used,
             "stores": stores
         }
         
@@ -249,9 +293,54 @@ async def closest_stores(request: ClosestStoreRequest):
         raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 
+def process_single_store(store, items_list):
+    """
+    Traite un seul magasin et retourne ses résultats
+    """
+    store_name = store.get("name", "").lower()
+    
+    # Chercher si l'un des mots du nom du magasin correspond à une clé dans WORKERS
+    matched_store = None
+    for word in store_name.split():
+        if word in WORKERS:
+            matched_store = word
+            break
+    
+    if not matched_store:
+        return {
+            "store": store,
+            "success_rate": 0,
+            "min_price": 0,
+            "max_price": 0,
+            "error": "Magasin non supporté"
+        }
+    
+    try:
+        max_workers = WORKERS[matched_store]
+        store_results = process_items_list(items_list, matched_store, store.get("address", ""), max_workers)
+        
+        successful = sum(1 for r in store_results if r.get("success", False))
+        total = len(store_results)
+        
+        return {
+            "store": store,
+            "success_rate": (successful / total) * 100 if total > 0 else 0,
+            "min_price": sum(r["lowest_price"] for r in store_results if r["success"]),
+            "max_price": sum(r["highest_price"] for r in store_results if r["success"]),
+        }
+    except Exception as e:
+        return {
+            "store": store,
+            "success_rate": 0,
+            "min_price": 0,
+            "max_price": 0,
+            "error": str(e)
+        }
+
+
 ### ENDPOINT QUI PREND UNE LISTE, UNE ADRESSE, UN RAYON EN KM ET RETOURNE CHAQUE SUPERMARCHÉ PROCHE AVEC LE HIGHEST PRICE, LOWEST PRICE ET SUCCESS RATE
 @app.post("/closest_store_groceries")
-async def closest_store_groceries(request: ColestStoreGroceries):
+async def closest_store_groceries(request: ClosestStoreGroceries):
     """
     Endpoint pour obtenir les supermarchés proches d'une adresse donnée avec les prix des articles
     
@@ -262,50 +351,49 @@ async def closest_store_groceries(request: ColestStoreGroceries):
         Liste des supermarchés proches avec les prix des articles
     """
     try:
-        stores = find_supermarkets(request.adress, request.max_distance_km)
+        # Essayer d'abord Google Maps, fallback sur Overpass si erreur
+        try:
+            stores = find_supermarkets_gcp(request.adress, request.max_distance_km)
+            api_used = "Google Maps"
+        except Exception as gcp_error:
+            print(f"Google Maps API indisponible: {gcp_error}")
+            stores = find_supermarkets(request.adress, request.max_distance_km)
+            api_used = "Overpass"
+        
+            
         stores = stores.to_dict(orient="records")
         
-        results = []
+        # Convertir les items une seule fois
+        items_dict = [
+            {
+                "name": item.name,
+                "brand": item.brand or "",
+                "quantity": item.quantity or ""
+            }
+            for item in request.items
+        ]
         
-        for store in stores:
-            store_name = store.get("name", "").lower()
-            
-            # Chercher si l'un des mots du nom du magasin correspond à une clé dans WORKERS
-            matched_store = None
-            for word in store_name.split():
-                if word in WORKERS:
-                    matched_store = word
-                    break
-            
-            if matched_store:
-                max_workers = WORKERS[matched_store]
-                items_dict = [
-                    {
-                        "name": item.name,
-                        "brand": item.brand or "",
-                        "quantity": item.quantity or ""
-                    }
-                    for item in request.items
-                ]
-                
-                store_results = process_items_list(items_dict, matched_store, store.get("address", ""), max_workers)
-                
-                successful = sum(1 for r in store_results if r.get("success", False))
-                total = len(store_results)
-                results.append({
-                    "store": store,
-                    "success_rate": (successful / total) * 100 if total > 0 else 0,
-                    "min_price": sum(r["lowest_price"] for r in store_results if r["success"]),
-                    "max_price": sum(r["highest_price"] for r in store_results if r["success"]),
-                    
-                })
+        # PARALLÉLISATION : Traiter tous les magasins en parallèle
+        loop = asyncio.get_event_loop()
+        
+        # Exécuter en parallèle
+        tasks = [
+            loop.run_in_executor(None, process_single_store, store, items_dict)
+            for store in stores
+        ]
+        
+        results = await asyncio.gather(*tasks)
         
         return {
             "address": request.adress,
             "max_distance_km": request.max_distance_km,
+            "stores_processed": len(results),
+            "api_used": api_used,
             "stores_with_prices": results
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 

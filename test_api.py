@@ -4,8 +4,8 @@ Script de test pour l'API FastAPI du comparateur de prix
 import requests
 import json
 
-BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
-# BASE_URL = "http://localhost:8080"
+# BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
+BASE_URL = "http://localhost:8080"
 
 def test_root():
     """Test de l'endpoint racine"""
@@ -85,11 +85,13 @@ def test_closest_stores():
     print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
     print()
 
+import time 
+
 def test_closest_store_groceries():
     """Test de l'endpoint /closest_store_groceries"""
     data = {
         "adress": "Marly le Roi",
-        "max_distance_km": 2.0,
+        "max_distance_km": 1.0,
         "items": [
             {
                 "name": "lait",
@@ -106,9 +108,10 @@ def test_closest_store_groceries():
     
     print("=== Test /closest_store_groceries ===")
     print(f"Données envoyées: {json.dumps(data, indent=2, ensure_ascii=False)}")
-    
+    debut=time.time()
     response = requests.post(f"{BASE_URL}/closest_store_groceries", json=data)
-    
+    fin=time.time()
+    print(f"Temps écoulé: {fin - debut} secondes")
     print(f"Status: {response.status_code}")
     print(f"Response: {json.dumps(response.json(), indent=2, ensure_ascii=False)}")
     print()
@@ -120,9 +123,9 @@ if __name__ == "__main__":
     
     try:
         test_root()
-        test_single_item()
-        test_multiple_items()
-        test_closest_stores()
+        #test_single_item()
+        #test_multiple_items()
+        #test_closest_stores()
         test_closest_store_groceries()
     except requests.exceptions.ConnectionError:
         print("Erreur: Impossible de se connecter à l'API. Assurez-vous qu'elle est lancée.")

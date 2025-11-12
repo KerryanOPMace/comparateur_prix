@@ -1,6 +1,126 @@
 import requests
 from geopy.geocoders import Nominatim
 import pandas as pd
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def find_supermarkets_gcp(address, radius_km=5):
+    """
+    Trouve les supermarchés autour d'une adresse donnée en utilisant Google Places API.
+    Beaucoup plus rapide et fiable qu'Overpass.
+    
+    Nécessite une clé API Google Maps avec Places API activée.
+    Définir la variable d'environnement GOOGLE_MAPS_API_KEY.
+    """
+    # Vérifier la clé API
+    api_key = os.getenv('GOOGLE_MAPS_API_KEY')
+    if not api_key:
+        raise ValueError("GOOGLE_MAPS_API_KEY non définie. Obtenez une clé sur https://console.cloud.google.com/")
+    
+    # 1. Géocoder l'adresse avec Google Geocoding API
+    geocoding_url = "https://maps.googleapis.com/maps/api/geocode/json"
+    geocoding_params = {
+        'address': address,
+        'key': api_key,
+        'language': 'fr'
+    }
+    
+    try:
+        geocoding_response = requests.get(geocoding_url, params=geocoding_params, timeout=10)
+        geocoding_response.raise_for_status()
+        geocoding_data = geocoding_response.json()
+        
+        if geocoding_data['status'] != 'OK' or not geocoding_data['results']:
+            raise ValueError(f"Adresse introuvable : {address}")
+            
+        location = geocoding_data['results'][0]['geometry']['location']
+        lat, lon = location['lat'], location['lng']
+        
+    except Exception as e:
+        raise ValueError(f"Erreur géocodage : {str(e)}")
+    
+    # 2. Rechercher les supermarchés avec Places API Nearby Search
+    places_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    radius_m = radius_km * 1000
+    
+    supermarkets = []
+    
+    # Types de lieux à rechercher
+    place_types = ['supermarket', 'grocery_or_supermarket']
+    
+    for place_type in place_types:
+        places_params = {
+            'location': f"{lat},{lon}",
+            'radius': radius_m,
+            'type': place_type,
+            'key': api_key,
+            'language': 'fr'
+        }
+        
+        try:
+            places_response = requests.get(places_url, params=places_params, timeout=10)
+            places_response.raise_for_status()
+            places_data = places_response.json()
+            
+            if places_data['status'] not in ['OK', 'ZERO_RESULTS']:
+                continue
+                
+            # Traiter les résultats
+            for place in places_data.get('results', []):
+                name = place.get('name', 'Inconnu')
+                place_lat = place['geometry']['location']['lat']
+                place_lng = place['geometry']['location']['lng']
+                
+                # Extraire l'adresse formatée
+                vicinity = place.get('vicinity', '')
+                
+                # Identifier la marque/enseigne à partir du nom
+                brand = ""
+                name_lower = name.lower()
+                
+                # Mapping des enseignes courantes
+                brand_mapping = {
+                    'carrefour': 'carrefour',
+                    'monoprix': 'monoprix', 
+                    'aldi': 'aldi',
+                    'super u': 'u',
+                    'hyper u': 'u',
+                    'marché u': 'u',
+                    'leclerc': 'leclerc',
+                    'intermarché': 'intermarché',
+                    'casino': 'casino',
+                    'franprix': 'franprix',
+                    'picard': 'picard'
+                }
+                
+                for key, value in brand_mapping.items():
+                    if key in name_lower:
+                        brand = value
+                        break
+                
+                supermarkets.append({
+                    "name": name,
+                    "brand": brand,
+                    "latitude": place_lat,
+                    "longitude": place_lng,
+                    "address": vicinity,
+                    "rating": place.get('rating', 0),
+                    "place_id": place.get('place_id', '')
+                })
+                
+        except Exception as e:
+            continue  # Continuer avec le type suivant si erreur
+    
+    # 3. Supprimer les doublons basés sur le nom et la position
+    df = pd.DataFrame(supermarkets)
+    if not df.empty:
+        df = df.drop_duplicates(subset=['name', 'latitude', 'longitude'])
+        df = df.reset_index(drop=True)
+    
+    return df
+
 
 def find_supermarkets(address, radius_km=5):
     """
@@ -92,5 +212,21 @@ def find_supermarkets(address, radius_km=5):
 # --- Exemple d'utilisation ---
 if __name__ == "__main__":
     adresse = "Marly le roi"
-    resultats = find_supermarkets(adresse, radius_km=2)
-    print(resultats)
+    
+    print("=== Test avec Google Maps API ===")
+    try:
+        resultats_gcp = find_supermarkets_gcp(adresse, radius_km=2)
+        print("Résultats Google Maps :")
+        print(resultats_gcp)
+        print(f"Trouvé {len(resultats_gcp)} magasins")
+    except Exception as e:
+        print(f"Erreur Google Maps: {e}")
+    
+    print("\n=== Test avec Overpass API ===")
+    try:
+        resultats_overpass = find_supermarkets(adresse, radius_km=2)
+        print("Résultats Overpass :")
+        print(resultats_overpass)
+        print(f"Trouvé {len(resultats_overpass)} magasins")
+    except Exception as e:
+        print(f"Erreur Overpass: {e}")

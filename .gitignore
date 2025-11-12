@@ -4,3 +4,4 @@ __pycache__/
 *$py.class
 gcloud.gz
 google-cloud-sdk/
+.env

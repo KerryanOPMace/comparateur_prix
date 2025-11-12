@@ -2,6 +2,8 @@ import concurrent.futures
 from typing import List, Dict, Optional
 import asyncio
 import os
+import gc
+import psutil
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -39,10 +41,10 @@ app = FastAPI(
 
 
 WORKERS = {
-    "u": 16,
-    "carrefour": 16,
-    "aldi": 16,
-    "monoprix": 16
+    "u": 4,      # Réduit pour éviter l'overload
+    "carrefour": 6,
+    "aldi": 6,
+    "monoprix": 6
 }
 
 class Item(BaseModel):
@@ -100,14 +102,21 @@ def search_single_item(store: str, city: str, item: Dict) -> Dict:
 
 @app.get("/health")
 async def health():
-    """Endpoint de santé avec diagnostic des configurations"""
+    """Endpoint de santé avec diagnostic des configurations et mémoire"""
     google_api_configured = bool(os.getenv('GOOGLE_MAPS_API_KEY'))
     environment = os.getenv('ENVIRONMENT', 'development')
+    
+    # Informations mémoire
+    process = psutil.Process()
+    memory_info = process.memory_info()
+    memory_mb = memory_info.rss / 1024 / 1024
     
     return {
         "status": "healthy",
         "environment": environment,
         "google_maps_api_configured": google_api_configured,
+        "memory_usage_mb": round(memory_mb, 2),
+        "memory_percent": round(process.memory_percent(), 2),
         "supported_stores": list(WORKERS.keys()),
         "workers_configuration": WORKERS
     }
@@ -231,7 +240,7 @@ async def list_price_estimation(request: ListPriceEstimationRequest):
 
 def process_items_list(articles: List[Dict], store: str, city: str = "Le port-marly", max_workers: int = 2) -> List[Dict]:
     """
-    Traite une liste d'articles avec multithreading
+    Traite une liste d'articles avec multithreading et gestion mémoire
     
     Args:
         articles: Liste d'articles [{"name": "...", "brand": "...", "quantity": "..."}]
@@ -244,6 +253,9 @@ def process_items_list(articles: List[Dict], store: str, city: str = "Le port-ma
     """
     results = []
     
+    # Limiter le nombre de workers pour éviter l'explosion mémoire
+    max_workers = min(max_workers, 8)
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_item = {executor.submit(search_single_item, store, city, item): item for item in articles}
         
@@ -254,6 +266,14 @@ def process_items_list(articles: List[Dict], store: str, city: str = "Le port-ma
             except Exception as exc:
                 item = future_to_item[future]
                 results.append({"item": item, "store": store, "success": False, "error": str(exc)})
+            finally:
+                # Nettoyage forcé après chaque item
+                del future_to_item[future]
+                gc.collect()
+    
+    # Nettoyage final
+    del future_to_item
+    gc.collect()
     
     return results
 
@@ -298,39 +318,46 @@ async def closest_stores(request: ClosestStoreRequest):
 
 def process_single_store(store, items_list):
     """
-    Traite un seul magasin et retourne ses résultats
+    Traite un seul magasin et retourne ses résultats avec gestion mémoire
     """
-    store_name = store.get("name", "").lower()
-    
-    # Chercher si l'un des mots du nom du magasin correspond à une clé dans WORKERS
-    matched_store = None
-    for word in store_name.split():
-        if word in WORKERS:
-            matched_store = word
-            break
-    
-    if not matched_store:
-        return {
-            "store": store,
-            "success_rate": 0,
-            "min_price": 0,
-            "max_price": 0,
-            "error": "Magasin non supporté"
-        }
-    
     try:
+        store_name = store.get("name", "").lower()
+        
+        # Chercher si l'un des mots du nom du magasin correspond à une clé dans WORKERS
+        matched_store = None
+        for word in store_name.split():
+            if word in WORKERS:
+                matched_store = word
+                break
+        
+        if not matched_store:
+            return {
+                "store": store,
+                "success_rate": 0,
+                "min_price": 0,
+                "max_price": 0,
+                "error": "Magasin non supporté"
+            }
+        
         max_workers = WORKERS[matched_store]
         store_results = process_items_list(items_list, matched_store, store.get("address", ""), max_workers)
         
         successful = sum(1 for r in store_results if r.get("success", False))
         total = len(store_results)
         
-        return {
+        result = {
             "store": store,
             "success_rate": (successful / total) * 100 if total > 0 else 0,
             "min_price": sum(r["lowest_price"] for r in store_results if r["success"]),
             "max_price": sum(r["highest_price"] for r in store_results if r["success"]),
         }
+        
+        # Nettoyage mémoire
+        del store_results
+        gc.collect()
+        
+        return result
+        
     except Exception as e:
         return {
             "store": store,
@@ -339,6 +366,9 @@ def process_single_store(store, items_list):
             "max_price": 0,
             "error": str(e)
         }
+    finally:
+        # Nettoyage forcé à la fin
+        gc.collect()
 
 
 ### ENDPOINT QUI PREND UNE LISTE, UNE ADRESSE, UN RAYON EN KM ET RETOURNE CHAQUE SUPERMARCHÉ PROCHE AVEC LE HIGHEST PRICE, LOWEST PRICE ET SUCCESS RATE

@@ -63,7 +63,7 @@ def find_supermarkets_gcp(address, radius_km=5):
             places_response = requests.get(places_url, params=places_params, timeout=10)
             places_response.raise_for_status()
             places_data = places_response.json()
-            
+            print(places_data)
             if places_data['status'] not in ['OK', 'ZERO_RESULTS']:
                 continue
                 
@@ -72,6 +72,7 @@ def find_supermarkets_gcp(address, radius_km=5):
                 name = place.get('name', 'Inconnu')
                 place_lat = place['geometry']['location']['lat']
                 place_lng = place['geometry']['location']['lng']
+                is_opened = place.get('opening_hours', {}).get('open_now', None)
                 
                 # Extraire l'adresse formatée
                 vicinity = place.get('vicinity', '')
@@ -106,8 +107,7 @@ def find_supermarkets_gcp(address, radius_km=5):
                     "latitude": place_lat,
                     "longitude": place_lng,
                     "address": vicinity,
-                    "rating": place.get('rating', 0),
-                    "place_id": place.get('place_id', '')
+                    "is_opened": is_opened
                 })
                 
         except Exception as e:

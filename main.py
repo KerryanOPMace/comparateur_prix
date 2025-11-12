@@ -39,10 +39,10 @@ app = FastAPI(
 
 
 WORKERS = {
-    "u": 3,
-    "carrefour": 6,
-    "aldi": 10,
-    "monoprix": 10
+    "u": 16,
+    "carrefour": 16,
+    "aldi": 16,
+    "monoprix": 16
 }
 
 class Item(BaseModel):

@@ -4,8 +4,8 @@ Script de test pour l'API FastAPI du comparateur de prix
 import requests
 import json
 
-BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
-#BASE_URL = "http://localhost:8080"
+#BASE_URL = "https://pricecomparing-1062149715485.europe-west9.run.app"
+BASE_URL = "http://localhost:8080"
 
 def test_root():
     """Test de l'endpoint racine"""

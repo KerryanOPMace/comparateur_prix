@@ -331,11 +331,22 @@ def process_single_store(store, items_list):
                 break
         
         if not matched_store:
+            # Créer une liste par défaut avec les produits demandés mais non trouvés
+            default_products = [
+                {
+                    "item": item,
+                    "store": matched_store or "unknown",
+                    "success": False,
+                    "error": "Magasin non supporté"
+                }
+                for item in items_list
+            ]
             return {
                 "store": store,
                 "success_rate": 0,
                 "min_price": 0,
                 "max_price": 0,
+                "products": default_products,
                 "error": "Magasin non supporté"
             }
         
@@ -350,20 +361,31 @@ def process_single_store(store, items_list):
             "success_rate": (successful / total) * 100 if total > 0 else 0,
             "min_price": sum(r["lowest_price"] for r in store_results if r["success"]),
             "max_price": sum(r["highest_price"] for r in store_results if r["success"]),
+            "products": store_results  # Ajout de la liste détaillée des produits
         }
         
-        # Nettoyage mémoire
-        del store_results
+        # Nettoyage mémoire - on garde store_results dans le résultat
         gc.collect()
         
         return result
         
     except Exception as e:
+        # Créer une liste par défaut avec les produits demandés mais en erreur
+        default_products = [
+            {
+                "item": item,
+                "store": "unknown",
+                "success": False,
+                "error": str(e)
+            }
+            for item in items_list
+        ]
         return {
             "store": store,
             "success_rate": 0,
             "min_price": 0,
             "max_price": 0,
+            "products": default_products,
             "error": str(e)
         }
     finally:
